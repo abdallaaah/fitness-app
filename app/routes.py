@@ -38,19 +38,18 @@ def bmi():
     data = {}
     if request.method == 'POST':
         if form.validate_on_submit():
-            bmi = (form.weight.data / ((form.height.data / 100) ** 2))
-
+            bmi = round((form.weight.data / ((form.height.data / 100) ** 2)), 2)
             if form.gender.data == 'male':
                 bmr = 66.47 + (13.75 * form.weight.data) + (5.003 *  form.height.data) - (6.755 * form.age.data)    
             else:
                 bmr = 655.1 + (9.563 * form.weight.data) + (1.850 *  form.height.data) - (6.755 * form.age.data)
             
-            bmr = bmr * activity_calc(form.activity.data)
+            bmr = int(bmr * activity_calc(form.activity.data))
             
-            protein = [round((bmr * 20) / 100, 2), round((bmr * 40) / 100, 2)] 
-            carb = [round((bmr * 40) / 100, 2), round((bmr * 60) / 100, 2)]
-            fats = [round((bmr * 20) / 100, 2), round((bmr * 35) /100, 2)]
-            water_intake = form.weight.data * 0.033
+            protein = [int((bmr * 20) / 100), int((bmr * 40) / 100)] 
+            carb = [int((bmr * 40) / 100), int((bmr * 60) / 100)]
+            fats = [int((bmr * 20) / 100), int((bmr * 35) /100)]
+            water_intake = round(form.weight.data * 0.033, 1)
                 
             data = {
                 'bmi': bmi,
@@ -124,6 +123,7 @@ def profile():
         form = UserBodyForm()
         body_records = {}
         rows = {}
+        bmr = None
         rows = db.session.query(Body).filter_by(user_id = current_user.id).all()
         if form.validate_on_submit():
             totalWeight = round(form.total_body_water.data + form.protein.data + form.minerals.data + form.body_fat.data, 1)
@@ -131,92 +131,98 @@ def profile():
                     ## i need to update user weight every time
             user = User.query.get(current_user.id)
             user.weight = totalWeight
-            bmr = body.calculate_bmr()
             db.session.add(body, user)
+            user.calculate_bmr()
+
             db.session.commit()
+            bmr = body.calculate_bmr()
             rows = db.session.query(Body).filter_by(user_id = current_user.id).all()
             return redirect(url_for('profile'))
 
 
-    return render_template('user.html', user=user, form=form, body_records=rows)
+    return render_template('user.html', user=user, form=form, body_records=rows, bmr=bmr)
 
 
 @app.route('/goal', methods=['GET', 'POST'])
 def goal():
     form = GoalForm()
+    goal = {}
     seperate = {}
-    if form.validate_on_submit():
-        caliories = cal_per_day_after_goal(form.goal.data, form.level.data)
-        seperate = seprate_cal_need(caliories)
-        goal = Goal(user_id=current_user.id, goal=form.goal.data, level=form.level.data, 
-                    fats_cal_per_day=seperate.get('fats')[1], protein_cal_per_day=seperate.get('protein')[1], 
-                    carb_cal_per_day=seperate.get('carbs')[1])
-        db.session.add(goal)
-        db.session.commit()
-        print('xxxxxxxxxxx')
-        print(seperate)
-        # return jsonify({'caliories_needed': seperate})
     user = get_user_data()
-    x = request.args.get('?qq')
-    result = db.session.query(Food).filter(Food.name.like(f'%{x}%'))
-    for row in result:
-        print(row)
-        print("name :", row.calories)
-        return jsonify({'name': row.name, 'calories': row.calories, 'calories_needed': seperate})
-    return render_template('goal.html', user=user, form=form, data=seperate)
+    goal = db.session.scalar(sa.select(Goal).where(Goal.user_id == current_user.id).order_by(Goal.id.desc()).limit(1))
+    # print('seeeeeeeeeeee goalss', goal.fats_cal_per_day)
+    if form.validate_on_submit(): 
+        ########################################################################
+        egg = Food(name="egg", category="protein", calories=50)
+        bread = Food(name="bread", category="carb", calories=200)   
+        chicken = Food(name="chicken", category="protein", calories=150)   
+        ########################################################################
+        goal = Goal(user_id=current_user.id, goal=form.goal.data, level=form.level.data)
+        db.session.add_all([goal, egg, bread, chicken])
+        db.session.commit()
+        caliories = goal.cal_per_day_after_goal(form.goal.data, form.level.data, form.activity.data)
+        goal.total_claories_per_day = caliories
+        seperate = goal.seprate_cal_need(caliories)
+        goal.update_user_daily_goal_cal(caliories, seperate)
+        print('555555555555555555555555555555555', goal.fats_cal_per_day, goal.carb_cal_per_day)
+    if request.args.get('?qq'):
+        food_name = request.args.get('?qq')
+        food = db.session.query(Food).filter(Food.name.like(f'%{food_name}%')).first()
+        return jsonify({
+        'name': food.name,
+        'calories': food.calories
+    })
+        
+    return render_template('goal.html', user=user, form=form, data=goal)
 
+@app.route('/search_food')
+def search_food():
+    if request.args.get('?qq'):
+        food_name = request.args.get('?qq')
+        food = db.session.query(Food).filter(Food.name.like(f'%{food_name}%')).first()
+        return jsonify({
+        'name': food.name,
+        'calories': food.calories,
+        'category': food.category
+    })
 
-def seprate_cal_need(caliories):
+@app.route('/update_cal')
+def update_user_current_cal():
+    # Retrieve query parameters without the '?'
+    fetch = request.args.get('fetch', default=False, type=bool)
+    if request.args.get('name') and request.args.get('name') and int(request.args.get('calories')) and request.args.get('category'):
+        food_name = request.args.get('name')
+        calories = int(request.args.get('calories'))
+        category = request.args.get('category')
+        goal = db.session.scalar(sa.select(Goal).where(Goal.user_id == current_user.id).order_by(Goal.id.desc()).limit(1))
+        total_claories_per_day, current_protein_cal, current_carb_cal, current_fat_cal = goal.update_user_current_cal(calories, category)
 
-    """calculate every factor or body need protein, fats, carbs
-        Args: caliories per day
-        Return: dict contain all factors needed
-    """
-    protein_g = 2.5 * current_user.weight
-    protein_cal = protein_g * 4
-    fat_cal = caliories * (25 / 100)
-    fat_g = fat_cal / 9
-    carb_cal = caliories - (protein_cal + fat_cal)
-    carb_g = carb_cal / 4
-    caliories_needed = {
-        "protein": [protein_g, protein_cal],
-        "fats": [fat_g, fat_cal],
-        "carbs": [carb_g, carb_cal],
-    }
-    return caliories_needed
+        # Print the retrieved parameters for debugging
+        print('Food Name:', food_name)
+        print('Calories:', calories)
+        print('Category:', category)
 
-
-def cal_per_day_after_goal(goal, level):
-    """calculate caliories needed per day based on level from the form
+        # You can use these parameters as needed
+        # For demonstration, let's return them as JSON
+        return jsonify({
+            'total_claories_per_day': total_claories_per_day,
+            'current_protein_cal': current_protein_cal,
+            'current_carb_cal': current_carb_cal,
+            'current_fat_cal': current_fat_cal,
+        })
     
-    Keyword arguments:
-    argument -- goal: gain or lost weight
-             -- level: level bases on long,balanced,shot term 
+    if fetch:
+        if fetch:
+        # Retrieve the current state of the user's calorie data
+            goal = db.session.scalar(sa.select(Goal).where(Goal.user_id == current_user.id).order_by(Goal.id.desc()).limit(1))
+            user_calories = {
+                'total_claories_per_day': goal.total_claories_per_day,
+                'current_protein_cal': goal.current_protein_cal,
+                'current_carb_cal': goal.current_carb_cal,
+                'current_fat_cal': goal.current_fat_cal
+            }
+            return jsonify(user_calories)
 
-    Return: caliroies needed per day
-    """
-    
 
-    user = User.query.get(current_user.id)
-    bmr = user.calculate_bmr()
-    bmr = bmr * activity_calc(level)
-    if goal == 'Gain weight':
-        if level == 'Long Term':
-            caliories = bmr + 200
-        elif level == 'Balanced':
-            caliories = bmr + 500
-        else:
-            caliories = bmr + 700
-    
-    if goal == 'Lose weight':
-        if level == 'Long Term':
-            caliories = bmr - 200
 
-        elif level == 'Balanced':
-            caliories = bmr - 500
-        else:
-            caliories = bmr - 700
-    
-    print('zzzzzzzzzzzzzzzzzz', caliories)
-    return caliories
 

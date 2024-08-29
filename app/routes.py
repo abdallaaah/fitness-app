@@ -168,6 +168,7 @@ def goal():
     if request.args.get('?qq'):
         food_name = request.args.get('?qq')
         food = db.session.query(Food).filter(Food.name.like(f'%{food_name}%')).first()
+        print('ffffffffffff',goal.current_protein_cal)
         return jsonify({
         'name': food.name,
         'calories': food.calories
@@ -196,7 +197,8 @@ def update_user_current_cal():
         category = request.args.get('category')
         goal = db.session.scalar(sa.select(Goal).where(Goal.user_id == current_user.id).order_by(Goal.id.desc()).limit(1))
         total_claories_per_day, current_protein_cal, current_carb_cal, current_fat_cal = goal.update_user_current_cal(calories, category)
-        print('tottttttttttttttt', total_claories_per_day)
+        db.session.commit()
+        print('tottttttttttttttt', current_protein_cal)
 
         # Print the retrieved parameters for debugging
         print('Food Name:', food_name)
@@ -216,6 +218,7 @@ def update_user_current_cal():
         if fetch:
         # Retrieve the current state of the user's calorie data
             goal = db.session.scalar(sa.select(Goal).where(Goal.user_id == current_user.id).order_by(Goal.id.desc()).limit(1))
+            print('zzzzzzzzzzz', goal.current_protein_cal)
             user_calories = {
                 'total_claories_per_day': goal.total_claories_per_day,
                 'current_protein_cal': goal.current_protein_cal,

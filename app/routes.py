@@ -1,6 +1,6 @@
 from flask import render_template, request, Response, redirect, url_for, flash, jsonify
 from app import app, db
-from .forms import BmiForm, UserLoginForm, RegisterUser, UserBodyForm, GoalForm
+from .forms import BmiForm, UserLoginForm, RegisterUser, UserBodyForm, GoalForm, UpdateUser
 from flask_login import current_user, login_user, logout_user
 import sqlalchemy as sa
 from app.models import User, Body, Food, Goal
@@ -196,6 +196,7 @@ def update_user_current_cal():
         category = request.args.get('category')
         goal = db.session.scalar(sa.select(Goal).where(Goal.user_id == current_user.id).order_by(Goal.id.desc()).limit(1))
         total_claories_per_day, current_protein_cal, current_carb_cal, current_fat_cal = goal.update_user_current_cal(calories, category)
+        print('tottttttttttttttt', total_claories_per_day)
 
         # Print the retrieved parameters for debugging
         print('Food Name:', food_name)
@@ -223,6 +224,43 @@ def update_user_current_cal():
             }
             return jsonify(user_calories)
 
+@app.route('/edit/profile', methods=['GET', 'POST'])
+def edit_profile():
 
+        user = db.session.scalar(sa.select(User).where(User.id == current_user.id))
+        form = UpdateUser(
+        username=current_user.username,
+        email=current_user.email,
+        age=current_user.age,
+        gender=current_user.gender,
+        height=current_user.height,
+        weight=current_user.weight,
+        )   
+        print(form.errors)
+        if form.validate_on_submit():
+            # Here you will update the user's data
+            print('ttttttttttttttttttttttttttttttttttttttttttt',form.username.data)
+            current_user.username = form.username.data
+            current_user.email = form.email.data
+            current_user.age = form.age.data
+            current_user.gender = form.gender.data
+            current_user.height = form.height.data
+            current_user.weight = form.weight.data
+            db.session.commit()
+            return redirect(url_for('profile')) 
+        
+        return render_template('update_profile.html', form=form, user=current_user)
+
+@app.route('/delete_record/<int:record_id>', methods=['GET', 'POST'])
+def delete_record(record_id):
+    print(record_id)
+    record = db.session.scalar(sa.select(Body).where(Body.id == record_id))
+    if record:
+        db.session.delete(record)
+        db.session.commit()
+        flash('Record deleted successfully.', 'success')
+    else:
+        flash('Record not found.', 'danger')
+    return redirect(url_for('profile'))
 
 

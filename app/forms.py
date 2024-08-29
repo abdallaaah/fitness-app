@@ -59,6 +59,23 @@ class GoalForm(FlaskForm):
         activity = SelectField(u'Current Level Of Activity', choices=[('sedentary', 'Little - no Exercise'), ('lightly-active', '1-3'), ('moderately-active', '3-5'), ('active', '6-7'), ('extremely-active', 'Hard Exercise 6-7')], validators=[DataRequired()])
         submit = SubmitField('Set Goal')
 
+class UpdateUser(FlaskForm):
+    username = StringField('Username')
+    email = StringField('Email')
+    age = IntegerField('Age')
+    gender = SelectField('Gender', choices=[('Male', 'Male'), ('Female', 'Female')])
+    height = IntegerField('Height')
+    weight = IntegerField('Weight')
+    submit = SubmitField('Update Profile')
+
+#     def __init__(self, user, *args, **kwargs):
+#         super(UpdateUser, self).__init__(*args, **kwargs)
+#         self.username.data = user.username
+#         self.email.data = user.email
+#         self.age.data = user.age
+#         self.gender.data = user.gender
+#         self.height.data = user.height
+#         self.weight.data = user.weight
 
 
 

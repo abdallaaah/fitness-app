@@ -238,7 +238,7 @@ class Goal(db.Model):
         
         db.session.add(self)
         db.session.commit()
-        return self.total_claories_per_day, self.current_protein_cal, self.current_carb_cal, self.current_fat_cal
+        return int(self.total_claories_per_day), self.current_protein_cal, self.current_carb_cal, self.current_fat_cal
 
 
 
